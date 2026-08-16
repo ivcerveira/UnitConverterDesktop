@@ -6,16 +6,26 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.focus.focusProperties
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
 import androidx.compose.ui.window.rememberWindowState
 
+private enum class PowerField {
+    LINEAR,
+    LOGARITHMIC
+}
+
 fun main() = application {
     Window(
         onCloseRequest = ::exitApplication,
         title = "Meu Aplicativo",
+        resizable = false,
         state = rememberWindowState(width = 860.dp, height = 520.dp)
     ) {
         MaterialTheme {
@@ -26,13 +36,31 @@ fun main() = application {
 
 @Composable
 private fun UnitConverterScreen() {
-    var quantity by remember { mutableStateOf("Comprimento") }
-    var unit by remember { mutableStateOf("Quilômetro (km)") }
+    var linearUnit by remember { mutableStateOf("Miliwatt (mW)") }
+    var logarithmicUnit by remember { mutableStateOf("Decibel-miliwatt (dBm)") }
     var value by remember { mutableStateOf("") }
     var result by remember { mutableStateOf("") }
+    val linearPowerFocusRequester = remember { FocusRequester() }
+    val logarithmicPowerFocusRequester = remember { FocusRequester() }
+    var focusedPowerField by remember { mutableStateOf(PowerField.LINEAR) }
 
-    val quantities = listOf("Comprimento", "Massa", "Temperatura", "Volume")
-    val units = listOf("Quilômetro (km)", "Metro (m)", "Centímetro (cm)")
+    fun restoreTextFieldFocus() {
+        when (focusedPowerField) {
+            PowerField.LINEAR -> linearPowerFocusRequester.requestFocus()
+            PowerField.LOGARITHMIC -> logarithmicPowerFocusRequester.requestFocus()
+        }
+    }
+
+    //val linearUnits = listOf("pW", "nW", "uW", "mW", "W", "kW", "MW")
+    val linearUnits = listOf("Picowatt (pW)", "Nanowatt (nW)", "Microwatt (µW)",
+            "Miliwatt (mW)", "Watt (W)", "Quilowatt (kW)", "Megawatt (MW)")
+
+    //val logarithmicUnits = listOf("dBm", "dBW")
+    val logarithmicUnits = listOf("Decibel-miliwatt (dBm)", "Decibel-watt (dBW)")
+
+    LaunchedEffect(Unit) {
+        linearPowerFocusRequester.requestFocus()
+    }
 
     Surface(modifier = Modifier.fillMaxSize()) {
         Column(
@@ -60,17 +88,21 @@ private fun UnitConverterScreen() {
                         horizontalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         LabeledDropdown(
-                            label = "Grandeza",
-                            value = quantity,
-                            options = quantities,
-                            onValueChange = { quantity = it },
+                            value = linearUnit,
+                            options = linearUnits,
+                            onValueChange = {
+                                linearUnit = it
+                                restoreTextFieldFocus()
+                            },
                             modifier = Modifier.weight(1f)
                         )
 
                         LabeledTextField(
-                            label = "Valor",
+                            label = "Potência Linear",
                             value = value,
                             onValueChange = { value = it },
+                            focusRequester = linearPowerFocusRequester,
+                            onFocus = { focusedPowerField = PowerField.LINEAR },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -80,18 +112,21 @@ private fun UnitConverterScreen() {
                         horizontalArrangement = Arrangement.spacedBy(24.dp)
                     ) {
                         LabeledDropdown(
-                            label = "Unidade",
-                            value = unit,
-                            options = units,
-                            onValueChange = { unit = it },
+                            value = logarithmicUnit,
+                            options = logarithmicUnits,
+                            onValueChange = {
+                                logarithmicUnit = it
+                                restoreTextFieldFocus()
+                            },
                             modifier = Modifier.weight(1f)
                         )
 
                         LabeledTextField(
-                            label = "Resultado",
+                            label = "Potência Logarítmica",
                             value = result,
-                            onValueChange = {},
-                            readOnly = true,
+                            onValueChange = { result = it },
+                            focusRequester = logarithmicPowerFocusRequester,
+                            onFocus = { focusedPowerField = PowerField.LOGARITHMIC },
                             modifier = Modifier.weight(1f)
                         )
                     }
@@ -102,17 +137,20 @@ private fun UnitConverterScreen() {
 
             Button(
                 onClick = {
-                    // Esqueleto da tela: implemente a regra de conversão aqui.
+                    value = ""
                     result = ""
+                    restoreTextFieldFocus()
                 },
-                modifier = Modifier.align(Alignment.End)
+                modifier = Modifier
+                    .align(Alignment.End)
+                    .focusProperties { canFocus = false }
             ) {
                 Text(
-                    text = "↻",
+                    text = "⌫",
                     fontSize = 18.sp
                 )
                 Spacer(modifier = Modifier.width(8.dp))
-                Text("Converter")
+                Text("Limpar")
             }
         }
     }
@@ -124,6 +162,8 @@ private fun LabeledTextField(
     value: String,
     onValueChange: (String) -> Unit,
     modifier: Modifier = Modifier,
+    focusRequester: FocusRequester? = null,
+    onFocus: () -> Unit = {},
     readOnly: Boolean = false
 ) {
     Column(
@@ -139,7 +179,13 @@ private fun LabeledTextField(
         OutlinedTextField(
             value = value,
             onValueChange = onValueChange,
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(
+                    if (focusRequester != null) Modifier.focusRequester(focusRequester)
+                    else Modifier
+                )
+                .onFocusChanged { if (it.isFocused) onFocus() },
             singleLine = true,
             readOnly = readOnly
         )
@@ -149,7 +195,6 @@ private fun LabeledTextField(
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LabeledDropdown(
-    label: String,
     value: String,
     options: List<String>,
     onValueChange: (String) -> Unit,
@@ -162,7 +207,7 @@ private fun LabeledDropdown(
         verticalArrangement = Arrangement.spacedBy(8.dp)
     ) {
         Text(
-            text = label,
+            text = "Unidade",
             style = MaterialTheme.typography.labelLarge,
             color = MaterialTheme.colorScheme.primary
         )
@@ -175,7 +220,11 @@ private fun LabeledDropdown(
                 value = value,
                 onValueChange = {},
                 modifier = Modifier
-                    .menuAnchor()
+                    .menuAnchor(
+                        type = ExposedDropdownMenuAnchorType.PrimaryNotEditable,
+                        enabled = true
+                    )
+                    .focusProperties { canFocus = false }
                     .fillMaxWidth(),
                 readOnly = true,
                 singleLine = true,
@@ -192,8 +241,8 @@ private fun LabeledDropdown(
                     DropdownMenuItem(
                         text = { Text(option) },
                         onClick = {
-                            onValueChange(option)
                             expanded = false
+                            onValueChange(option)
                         }
                     )
                 }
